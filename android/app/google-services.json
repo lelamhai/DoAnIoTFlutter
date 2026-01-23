@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "234440154842",
+    "project_id": "face-recognition-iot-nhom03",
+    "storage_bucket": "face-recognition-iot-nhom03.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:234440154842:android:33c60a3c31fa7e4c5b0fe3",
+        "android_client_info": {
+          "package_name": "com.example.ioaniotfullter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCHEfRszBZkINQzq-KnspGunAHL4D59LmI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
