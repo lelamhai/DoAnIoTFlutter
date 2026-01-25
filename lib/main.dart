@@ -1,9 +1,56 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+// Background message handler
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  print('Handling a background message: ${message.messageId}');
+}
+
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+
+  // Set up Firebase Messaging background handler
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+  // Initialize local notifications
+  const AndroidInitializationSettings initializationSettingsAndroid =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+  const InitializationSettings initializationSettings = InitializationSettings(
+    android: initializationSettingsAndroid,
+  );
+  await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+
+  // Create notification channel
+  const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    'alarm_sound_channel',
+    'Alarm Sound Notifications',
+    description: 'This channel plays alarm sound for notifications.',
+    importance: Importance.high,
+    playSound: true,
+    sound: RawResourceAndroidNotificationSound('alarm'),
+  );
+
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >()
+      ?.createNotificationChannel(channel);
+
+  // Request notification permissions
+  await FirebaseMessaging.instance.requestPermission(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+
   runApp(const MyApp());
 }
 
@@ -58,6 +105,85 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   int _counter = 0;
+  String _fcmToken = 'Loading...';
+  String _lastMessage = 'No message yet';
+
+  @override
+  void initState() {
+    super.initState();
+    _setupFirebaseMessaging();
+  }
+
+  Future<void> _setupFirebaseMessaging() async {
+    // Get FCM Token
+    String? token = await FirebaseMessaging.instance.getToken();
+    setState(() {
+      _fcmToken = token ?? 'Token not available';
+    });
+    print('FCM Token: $token');
+
+    // Listen to foreground messages
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      print('Got a message whilst in the foreground!');
+      print('Message data: ${message.data}');
+
+      setState(() {
+        _lastMessage = message.notification?.title ?? 'New message';
+      });
+
+      if (message.notification != null) {
+        print('Message also contained a notification: ${message.notification}');
+        _showNotification(message.notification!);
+      }
+    });
+
+    // Handle notification tap when app is in background
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      print('A new onMessageOpenedApp event was published!');
+      setState(() {
+        _lastMessage = 'Opened from: ${message.notification?.title}';
+      });
+    });
+  }
+
+  Future<void> _showNotification(RemoteNotification notification) async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+          'alarm_sound_channel',
+          'Alarm Sound Notifications',
+          channelDescription:
+              'This channel plays alarm sound for notifications.',
+          importance: Importance.max,
+          priority: Priority.high,
+          showWhen: true,
+          playSound: true,
+          sound: RawResourceAndroidNotificationSound('alarm'),
+        );
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+      android: androidPlatformChannelSpecifics,
+    );
+    await flutterLocalNotificationsPlugin.show(
+      notification.hashCode,
+      notification.title,
+      notification.body,
+      platformChannelSpecifics,
+    );
+  }
+
+  void _copyFCMToken() async {
+    if (_fcmToken != 'Loading...' && _fcmToken != 'Token not available') {
+      await Clipboard.setData(ClipboardData(text: _fcmToken));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('FCM Token đã được copy!'),
+            duration: Duration(seconds: 2),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
+  }
 
   void _incrementCounter() {
     setState(() {
@@ -107,7 +233,44 @@ class _MyHomePageState extends State<MyHomePage> {
           // wireframe for each widget.
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            const Text('You have pushed the button this many times:'),
+            const Text(
+              'Firebase Cloud Messaging',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 20),
+            const Text('FCM Token:'),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: SelectableText(
+                _fcmToken,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontStyle: FontStyle.italic,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: _copyFCMToken,
+              icon: const Icon(Icons.copy),
+              label: const Text('Copy FCM Token'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepPurple,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text('Last Message:'),
+            Text(
+              _lastMessage,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 20),
+            const Text('Button counter:'),
             Text(
               '$_counter',
               style: Theme.of(context).textTheme.headlineMedium,
